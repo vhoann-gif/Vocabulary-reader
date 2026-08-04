@@ -1,8 +1,9 @@
-name: Build APK
+name: Extract and Build APK
 
 on:
   push:
-  workflow_dispatch:
+    branches: [ main ]
+  workflow_dispatch: {}
 
 jobs:
   build:
@@ -11,20 +12,31 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Giai nen zip neu co
+      - name: Giải nén project.zip
         run: |
-          for z in *.zip; do
-            [ -e "$z" ] && unzip -o "$z"
-          done
-          echo "--- noi dung ---"
-          ls -la
-
-      - name: Tim thu muc du an
-        id: find
-        run: |
-          DIR=$(dirname "$(find . -name 'settings.gradle*' -not -path '*/build/*' | head -1)")
-          echo "Thu muc du an: $DIR"
-          echo "dir=$DIR" >> $GITHUB_OUTPUT
+          set -e
+          if [ ! -f project.zip ]; then
+            echo "LOI: Khong tim thay project.zip o thu muc goc cua repo."
+            ls -la
+            exit 1
+          fi
+          rm -rf extracted
+          mkdir extracted
+          unzip -o project.zip -d extracted
+          # Neu zip co 1 thu muc goc bao ngoai thi nhay vao trong
+          if [ ! -f extracted/settings.gradle ]; then
+            INNER=$(find extracted -maxdepth 1 -mindepth 1 -type d | head -n 1)
+            if [ -n "$INNER" ] && [ -f "$INNER/settings.gradle" ]; then
+              shopt -s dotglob
+              mv "$INNER"/* extracted/
+            fi
+          fi
+          echo "--- Noi dung sau khi giai nen ---"
+          find extracted -type f | head -50
+          if [ ! -f extracted/settings.gradle ]; then
+            echo "LOI: Khong tim thay settings.gradle sau khi giai nen."
+            exit 1
+          fi
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4
@@ -32,45 +44,24 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - name: Setup Gradle 8.7
+        uses: gradle/actions/setup-gradle@v3
         with:
-          gradle-version: '8.9'
+          gradle-version: '8.7'
+
+      - name: Chap nhan license Android SDK
+        run: yes | sdkmanager --licenses > /dev/null 2>&1 || true
 
       - name: Build debug APK
-        working-directory: ${{ steps.find.outputs.dir }}
-        run: gradle :app:assembleDebug --no-daemon --stacktrace
+        working-directory: extracted
+        run: gradle assembleDebug --no-daemon --stacktrace --info
 
-      - name: Ky lai bang khoa co dinh
-        working-directory: ${{ steps.find.outputs.dir }}
-        run: |
-          KS=$(find "$GITHUB_WORKSPACE" -name 'tomoe-debug.keystore' | head -1)
-          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
-          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -r | head -1)
-          echo "Keystore: $KS"
-          if [ -n "$KS" ]; then
-            "$APKSIGNER" sign \
-              --ks "$KS" \
-              --ks-pass pass:android \
-              --ks-key-alias androiddebugkey \
-              --key-pass pass:android \
-              "$APK"
-            echo "Da ky lai bang khoa co dinh"
-          else
-            echo "Khong tim thay keystore, giu chu ky mac dinh"
-          fi
-
-      - name: Doi ten APK
-        working-directory: ${{ steps.find.outputs.dir }}
-        run: |
-          NAME=$(basename "$PWD")
-          cp app/build/outputs/apk/debug/*.apk "$GITHUB_WORKSPACE/$NAME.apk"
+      - name: Kiem tra file APK
+        run: ls -la extracted/app/build/outputs/apk/debug/
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apk
-          path: "*.apk"
+          name: TomoeScan-debug-apk
+          path: extracted/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
