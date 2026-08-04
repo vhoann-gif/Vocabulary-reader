@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Word Scanner</string>
+    <string name="instruction">Đưa thẻ chữ vào khung rồi nhấn nút</string>
+    <string name="scan_and_read">QUÉT &amp; ĐỌC</string>
+    <string name="camera_permission_needed">Ứng dụng cần quyền camera để quét thẻ chữ.</string>
+    <string name="no_word_found">Chưa đọc được chữ. Hãy đưa thẻ gần hơn và giữ thẳng.</string>
+    <string name="scanning">Đang quét…</string>
+    <string name="tts_unavailable">Thiết bị chưa có giọng đọc tiếng Anh.</string>
+</resources>
