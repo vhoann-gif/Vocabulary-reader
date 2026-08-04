@@ -1,39 +1,76 @@
-name: Build Android APK
+name: Build APK
 
 on:
-  workflow_dispatch:
   push:
-    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Giai nen zip neu co
+        run: |
+          for z in *.zip; do
+            [ -e "$z" ] && unzip -o "$z"
+          done
+          echo "--- noi dung ---"
+          ls -la
+
+      - name: Tim thu muc du an
+        id: find
+        run: |
+          DIR=$(dirname "$(find . -name 'settings.gradle*' -not -path '*/build/*' | head -1)")
+          echo "Thu muc du an: $DIR"
+          echo "dir=$DIR" >> $GITHUB_OUTPUT
+
+      - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: "17"
+          java-version: '17'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android platform
-        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
-
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: '8.9'
 
       - name: Build debug APK
-        run: gradle :app:assembleDebug
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+
+      - name: Ky lai bang khoa co dinh
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: |
+          KS=$(find "$GITHUB_WORKSPACE" -name 'tomoe-debug.keystore' | head -1)
+          APK=$(find app/build/outputs/apk/debug -name '*.apk' | head -1)
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -r | head -1)
+          echo "Keystore: $KS"
+          if [ -n "$KS" ]; then
+            "$APKSIGNER" sign \
+              --ks "$KS" \
+              --ks-pass pass:android \
+              --ks-key-alias androiddebugkey \
+              --key-pass pass:android \
+              "$APK"
+            echo "Da ky lai bang khoa co dinh"
+          else
+            echo "Khong tim thay keystore, giu chu ky mac dinh"
+          fi
+
+      - name: Doi ten APK
+        working-directory: ${{ steps.find.outputs.dir }}
+        run: |
+          NAME=$(basename "$PWD")
+          cp app/build/outputs/apk/debug/*.apk "$GITHUB_WORKSPACE/$NAME.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: WordScanner-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: apk
+          path: "*.apk"
